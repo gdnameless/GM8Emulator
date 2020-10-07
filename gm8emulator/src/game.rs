@@ -24,6 +24,7 @@ use crate::{
         font::{Character, Font},
         path::{self, Path},
         room::{self, Room},
+        sound::{self, Sound},
         sprite::{Collider, Frame, Sprite},
         trigger::{self, Trigger},
         Object, Script, Timeline,
@@ -51,6 +52,7 @@ use gmio::{
 };
 use includedfile::IncludedFile;
 use indexmap::IndexMap;
+use rodio::{OutputStream, OutputStreamHandle, Sink};
 use serde::{Deserialize, Serialize};
 use shared::{
     input::MouseButton,
@@ -66,6 +68,7 @@ use std::{
     net::{SocketAddr, TcpStream},
     path::PathBuf,
     rc::Rc,
+    sync::Arc,
     time::{Duration, Instant},
 };
 use string::RCStr;
@@ -169,6 +172,11 @@ pub struct Game {
     pub play_type: PlayType,
     pub stored_events: VecDeque<replay::Event>,
 
+    // rodio
+    pub rodio_stream: OutputStream,
+    pub rodio_stream_handle: OutputStreamHandle,
+    pub rodio_sinks: Vec<(Sink, ID, bool)>,
+
     // winit windowing
     pub window: Window,
     // Scaling type
@@ -210,10 +218,10 @@ pub struct Assets {
     pub paths: Vec<Option<Box<Path>>>,
     pub rooms: Vec<Option<Box<Room>>>,
     pub scripts: Vec<Option<Box<Script>>>,
+    pub sounds: Vec<Option<Box<Sound>>>,
     pub sprites: Vec<Option<Box<Sprite>>>,
     pub timelines: Vec<Option<Box<Timeline>>>,
     pub triggers: Vec<Option<Box<Trigger>>>,
-    // todo
 }
 
 impl From<PascalString> for RCStr {
@@ -281,6 +289,9 @@ impl Game {
             gm8exe::GameVersion::GameMaker8_0 => Version::GameMaker8_0,
             gm8exe::GameVersion::GameMaker8_1 => Version::GameMaker8_1,
         };
+
+        // Set up rodio output
+        let (rodio_stream, rodio_stream_handle) = rodio::OutputStream::try_default().expect("Failed to start rodio");
 
         // If there are no rooms, you can't build a GM8 game. Fatal error.
         // We need a lot of the initialization info from the first room,
@@ -724,6 +735,26 @@ impl Game {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let sounds = sounds
+            .into_iter()
+            .map(|s| {
+                s.map(|b| {
+                    Box::new(Sound {
+                        name: b.name.into(),
+                        source: b.data.map(Arc::from),
+                        kind: match b.kind {
+                            gm8exe::asset::sound::SoundKind::Normal => sound::Kind::Normal,
+                            gm8exe::asset::sound::SoundKind::BackgroundMusic => sound::Kind::BackgroundMusic,
+                            gm8exe::asset::sound::SoundKind::ThreeDimensional => sound::Kind::ThreeDimensional,
+                            gm8exe::asset::sound::SoundKind::Multimedia => sound::Kind::Multimedia,
+                        },
+                        volume: b.volume,
+                        pan: b.pan,
+                    })
+                })
+            })
+            .collect();
+
         let rooms = rooms
             .into_iter()
             .map(|t| {
@@ -888,7 +919,7 @@ impl Game {
             room_colour: room1_colour,
             show_room_colour: room1_show_colour,
             input_manager: InputManager::new(),
-            assets: Assets { backgrounds, fonts, objects, paths, rooms, scripts, sprites, timelines, triggers },
+            assets: Assets { backgrounds, fonts, objects, paths, rooms, scripts, sounds, sprites, timelines, triggers },
             event_holders,
             custom_draw_objects,
             views_enabled: false,
@@ -960,6 +991,9 @@ impl Game {
             scaling,
             play_type: PlayType::Normal,
             stored_events: VecDeque::new(),
+            rodio_stream,
+            rodio_stream_handle,
+            rodio_sinks: Vec::new(),
 
             // load_room sets this
             unscaled_width: 0,
@@ -2367,6 +2401,36 @@ impl Game {
             }
         }
         None
+    }
+
+    // Plays a sound, looking for an available rodio sink
+    pub fn play_sound<S>(&mut self, source: S, sound_id: ID, use_multimedia: bool)
+    where
+        S: rodio::Source + Send + 'static,
+        S::Item: rodio::Sample + Send,
+    {
+        // If this is multimedia, we need to stop any other multimedia sounds...
+        if use_multimedia {
+            self.rodio_sinks.retain(|(_, _, x)| !x);
+        }
+
+        // Look for a free sink
+        match self.rodio_sinks.iter_mut().find(|(x, _, _)| x.empty()) {
+            Some((sink, id, multimedia)) => {
+                // Use this sink and change the id of the sound being played here
+                sink.append(source);
+                *id = sound_id;
+                *multimedia = use_multimedia;
+            },
+            None => {
+                // There are no free sinks, so make a new one
+                // PlayError here is silently ignored (heh) - probably just means there is no output device
+                if let Ok(sink) = rodio::Sink::try_new(&self.rodio_stream_handle) {
+                    sink.append(source);
+                    self.rodio_sinks.push((sink, sound_id, use_multimedia));
+                }
+            },
+        }
     }
 }
 

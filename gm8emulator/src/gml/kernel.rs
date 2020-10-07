@@ -25,7 +25,7 @@ use gmio::{
 use image::RgbaImage;
 use shared::{input::MouseButton, types::Colour};
 use std::{
-    io::{Read, Write},
+    io::{BufReader, Read, Write},
     process::Command,
 };
 
@@ -2482,23 +2482,17 @@ impl Game {
         Ok(Default::default())
     }
 
-    pub fn action_sound(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 2
-        // TODO
-        //unimplemented!("Called unimplemented kernel function action_sound")
-        Ok(Default::default())
+    pub fn action_sound(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+        let (sound, repeat) = expect_args!(args, [any, any])?;
+        if repeat.is_truthy() { self.sound_loop(context, &[sound]) } else { self.sound_play(context, &[sound]) }
     }
 
-    pub fn action_end_sound(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        // TODO
-        //unimplemented!("Called unimplemented kernel function action_end_sound")
-        Ok(Default::default())
+    pub fn action_end_sound(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+        self.sound_stop(context, args)
     }
 
-    pub fn action_if_sound(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        unimplemented!("Called unimplemented kernel function action_if_sound")
+    pub fn action_if_sound(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+        self.sound_isplaying(context, args)
     }
 
     pub fn action_another_room(&mut self, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
@@ -11095,39 +11089,65 @@ impl Game {
         }
     }
 
-    pub fn sound_play(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //unimplemented!("Called unimplemented kernel function sound_play")
-        // TODO
+    pub fn sound_play(&mut self, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+        let sound_id = expect_args!(args, [int])?;
+        if let Some(sound) = self.assets.sounds.get_asset(sound_id) {
+            let kind = sound.kind;
+            if let Some(source) = &sound.source {
+                let cloned = source.clone();
+                let reader = BufReader::new(std::io::Cursor::new(cloned));
+                match rodio::Decoder::new(reader) {
+                    Ok(source) => self.play_sound(source, sound_id, kind == asset::sound::Kind::Multimedia),
+                    _ => {
+                        return Err(gml::Error::FunctionError(
+                            "sound_play".into(),
+                            format!("Decoder error for sound {}. Data may be malformed.", sound_id),
+                        ))
+                    },
+                }
+            }
+        }
         Ok(Default::default())
     }
 
-    pub fn sound_loop(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //unimplemented!("Called unimplemented kernel function sound_loop")
-        // TODO
+    pub fn sound_loop(&mut self, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+        let sound_id = expect_args!(args, [int])?;
+        if let Some(sound) = self.assets.sounds.get_asset(sound_id) {
+            let kind = sound.kind;
+            if let Some(source) = &sound.source {
+                use rodio::Source;
+                let cloned = source.clone();
+                let reader = BufReader::new(std::io::Cursor::new(cloned));
+                match rodio::Decoder::new(reader) {
+                    Ok(source) => {
+                        self.play_sound(source.repeat_infinite(), sound_id, kind == asset::sound::Kind::Multimedia)
+                    },
+                    _ => {
+                        return Err(gml::Error::FunctionError(
+                            "sound_loop".into(),
+                            format!("Decoder error for sound {}. Data may be malformed.", sound_id),
+                        ))
+                    },
+                }
+            }
+        }
         Ok(Default::default())
     }
 
-    pub fn sound_stop(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //unimplemented!("Called unimplemented kernel function sound_stop")
-        // TODO
+    pub fn sound_stop(&mut self, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+        let sound_id = expect_args!(args, [int])?;
+        self.rodio_sinks.retain(|(_, id, _)| *id != sound_id);
         Ok(Default::default())
     }
 
     pub fn sound_stop_all(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 0
-        //unimplemented!("Called unimplemented kernel function sound_stop_all")
-        // TODO
+        self.rodio_sinks.clear();
         Ok(Default::default())
     }
 
-    pub fn sound_isplaying(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //unimplemented!("Called unimplemented kernel function sound_isplaying")
-        // TODO
-        Ok(Default::default())
+    pub fn sound_isplaying(&mut self, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+        let sound_id = expect_args!(args, [int])?;
+        Ok(self.rodio_sinks.iter().any(|(sink, id, _)| *id == sound_id && !sink.empty()).into())
     }
 
     pub fn sound_volume(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
