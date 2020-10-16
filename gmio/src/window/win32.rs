@@ -34,13 +34,13 @@ use winapi::{
             SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, TrackPopupMenu,
             TranslateMessage, UnregisterClassW, COLOR_BACKGROUND, CS_OWNDC, ENUM_CURRENT_SETTINGS,
             GET_WHEEL_DELTA_WPARAM, GWLP_USERDATA, GWL_STYLE, HWND_TOP, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS,
-            IDC_HAND, IDC_IBEAM, IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_UPARROW,
-            IDC_WAIT, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_SHARED, MF_BYPOSITION, MF_STRING, MSG, PM_REMOVE, SM_CXSCREEN,
-            SM_CYSCREEN, SWP_NOMOVE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW, TME_LEAVE, TPM_LEFTALIGN, TPM_TOPALIGN,
-            TRACKMOUSEEVENT, WM_CLOSE, WM_COMMAND, WM_ERASEBKGND, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP,
-            WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSELEAVE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
-            WM_SETCURSOR, WM_SIZE, WM_SIZING, WNDCLASSEXW, WS_CAPTION, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP,
-            WS_SYSMENU, WS_THICKFRAME,
+            IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE,
+            IDC_UPARROW, IDC_WAIT, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_SHARED, MF_BYPOSITION, MF_STRING, MSG, PM_REMOVE,
+            SM_CXSCREEN, SM_CYSCREEN, SWP_NOMOVE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW, TME_LEAVE, TPM_LEFTALIGN,
+            TPM_TOPALIGN, TRACKMOUSEEVENT, WM_CLOSE, WM_COMMAND, WM_ERASEBKGND, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
+            WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSELEAVE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN,
+            WM_RBUTTONUP, WM_SETCURSOR, WM_SIZE, WM_SIZING, WNDCLASSEXW, WS_CAPTION, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
+            WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
         },
     },
 };
@@ -171,7 +171,9 @@ unsafe fn load_cursor(cursor: Cursor) -> HCURSOR {
         Cursor::Beam => IDC_IBEAM,
         Cursor::Cross => IDC_CROSS,
         Cursor::Hand => IDC_HAND,
+        Cursor::Help => IDC_HELP,
         Cursor::Hourglass => IDC_WAIT,
+        Cursor::No => IDC_NO,
         Cursor::Invisible => return ptr::null_mut() as HCURSOR,
         Cursor::SizeNESW => IDC_SIZENESW,
         Cursor::SizeNS => IDC_SIZENS,
@@ -179,6 +181,14 @@ unsafe fn load_cursor(cursor: Cursor) -> HCURSOR {
         Cursor::SizeWE => IDC_SIZEWE,
         Cursor::SizeAll => IDC_SIZEALL,
         Cursor::Up => IDC_UPARROW,
+
+        // Those are custom cursors and don't exists in windows
+        Cursor::NoDrop => IDC_NO,
+        Cursor::Drag => IDC_ARROW,
+        Cursor::HorSplit => IDC_SIZEWE,
+        Cursor::VertSplit => IDC_SIZENS,
+        Cursor::MultiDrag => IDC_ARROW,
+        Cursor::SQLWait => IDC_WAIT,
     };
     LoadImageW(ptr::null_mut(), name, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED) as HCURSOR
 }

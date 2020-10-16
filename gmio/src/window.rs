@@ -24,15 +24,23 @@ pub enum Cursor {
     AppStart,  // ⇖⌛
     Beam,      // I
     Cross,     // +
+    Drag,      // ⇖ (Custom)
     Hand,      // 👆
+    Help,      // ⇖?
     Hourglass, // ⌛
+    HorSplit,  // ↔ (Custom)
+    MultiDrag, // ⇖ (Custom)
+    No,        // ⌀
+    NoDrop,    // ⌀ (Custom)
     Invisible, //
     SizeNESW,  // ⤢
     SizeNS,    // ↕
     SizeNWSE,  // ⤡
     SizeWE,    // ↔
     SizeAll,   // ✥
+    SQLWait,   // ⌛ (Custom)
     Up,        // ↑
+    VertSplit, // ↕ (Custom)
 }
 
 impl Default for Cursor {

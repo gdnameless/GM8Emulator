@@ -138,6 +138,7 @@ pub struct Game {
     pub transition_steps: i32,    // default 80
     pub cursor_sprite: i32,       // default -1
     pub cursor_sprite_frame: u32, // default 0
+    pub window_cursor: i32,       // default 0
     pub score: i32,               // default 0
     pub score_capt: RCStr,        // default "Score: "
     pub score_capt_d: bool,       // display in caption?
@@ -932,6 +933,7 @@ impl Game {
             transition_steps: 80,
             cursor_sprite: -1,
             cursor_sprite_frame: 0,
+            window_cursor: 0,
             score: 0,
             score_capt: "Score: ".to_string().into(),
             lives: -1,

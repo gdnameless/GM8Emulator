@@ -24,6 +24,7 @@ use gmio::{
     window::Cursor,
 };
 use image::RgbaImage;
+use mappings::constants;
 use shared::{input::MouseButton, types::Colour};
 use std::{
     io::{Read, Write},
@@ -224,14 +225,41 @@ impl Game {
         Ok(self.window.get_title().to_owned().into())
     }
 
-    pub fn window_set_cursor(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        unimplemented!("Called unimplemented kernel function window_set_cursor")
+    pub fn window_set_cursor(&mut self, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+        let cursor_id: i32 = expect_args!(args, [int])?;
+        self.window_cursor = cursor_id;
+        // There's gotta be
+        let cursor = match cursor_id {
+            x if x == constants::CR_APPSTART as i32 => Cursor::AppStart,
+            x if x == constants::CR_ARROW as i32 => Cursor::Arrow,
+            x if x == constants::CR_BEAM as i32 => Cursor::Beam,
+            x if x == constants::CR_CROSS as i32 => Cursor::Cross,
+            x if x == constants::CR_DEFAULT as i32 => Cursor::default(),
+            x if x == constants::CR_DRAG as i32 => Cursor::Drag,
+            x if x == constants::CR_HANDPOINT as i32 => Cursor::Hand,
+            x if x == constants::CR_HELP as i32 => Cursor::Help,
+            x if x == constants::CR_HOURGLASS as i32 => Cursor::Hourglass,
+            x if x == constants::CR_HSPLIT as i32 => Cursor::HorSplit,
+            x if x == constants::CR_MULTIDRAG as i32 => Cursor::MultiDrag,
+            x if x == constants::CR_NO as i32 => Cursor::No,
+            x if x == constants::CR_NODROP as i32 => Cursor::NoDrop,
+            x if x == constants::CR_NONE as i32 => Cursor::Invisible,
+            x if x == constants::CR_SIZE_ALL as i32 => Cursor::SizeAll,
+            x if x == constants::CR_SIZE_NESW as i32 => Cursor::SizeNESW,
+            x if x == constants::CR_SIZE_NS as i32 => Cursor::SizeNS,
+            x if x == constants::CR_SIZE_NWSE as i32 => Cursor::SizeNWSE,
+            x if x == constants::CR_SIZE_WE as i32 => Cursor::SizeWE,
+            x if x == constants::CR_SQLWAIT as i32 => Cursor::SQLWait,
+            x if x == constants::CR_UPARROW as i32 => Cursor::Up,
+            x if x == constants::CR_VSPLIT as i32 => Cursor::VertSplit,
+            _ => Cursor::default(),
+        };
+        self.window.set_cursor(cursor);
+        Ok(Default::default())
     }
 
     pub fn window_get_cursor(&mut self, _context: &mut Context, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 0
-        unimplemented!("Called unimplemented kernel function window_get_cursor")
+        Ok(self.window_cursor.into())
     }
 
     pub fn window_set_color(&mut self, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
@@ -2983,7 +3011,6 @@ impl Game {
 
         let health_ratio = f64::from(self.health / Real::from(100.0));
 
-        use mappings::constants;
         let bar_colour = match col {
             0 => {
                 // green to red (actually c_lime to c_red)
