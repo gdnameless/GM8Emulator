@@ -333,8 +333,8 @@ impl ControlPanel {
             
                 KeyButton { x: 210, y: 210, key: input::Key::F2, state: ButtonState::Neutral, label: label_f2 },
                 KeyButton { x: 270, y: 90, key: input::Key::S, state: ButtonState::Neutral, label: label_s },
-                KeyButton { x: 210, y: 90, key: input::Key::X, state: ButtonState::Neutral, label: label_d },
-                KeyButton { x: 92, y: 90, key: input::Key::G, state: ButtonState::Neutral, label: label_a },
+                KeyButton { x: 210, y: 90, key: input::Key::D, state: ButtonState::Neutral, label: label_d },
+                KeyButton { x: 92, y: 90, key: input::Key::A, state: ButtonState::Neutral, label: label_a },
             ],
             misc_buttons: vec![
                 MiscButton { x: 151, y: 210, miscinputtype: input::MiscInputs::Cactus, pressed: false, label: label_cactus },
