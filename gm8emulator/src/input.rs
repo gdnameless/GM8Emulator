@@ -136,6 +136,25 @@ impl InputManager {
         }
     }
 
+    /// Informs the input manager that cactus
+    pub fn shift_cactus(&mut self) {
+        let code = self.key_get_map(Key::Shift as usize);
+        self.kb_held.set(code, false);
+        self.kb_released.set(code, true);
+        if self.kb_key == code as u32 {
+            self.kb_key = 0;
+        }
+    }
+
+    /// Informs the input manager that window trick
+    pub fn shift_window_trick(&mut self) {
+        let code = self.key_get_map(Key::Shift as usize);
+        self.kb_held.set(code, !(self.kb_held.get(code)));
+        if self.kb_key == code as u32 {
+            self.kb_key = 0;
+        }
+    }
+
     /// Informs the input manager that a key has been pressed
     pub fn key_press(&mut self, key: Key) {
         // self.kb_handle_direct(key, true);

@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum MiscInputs {
+    Cactus,
+    WindowTrick,
+}
+
 // WINAPI constants also used by GM8
 pub const VK_ADD: u8 = 0x6B;
 pub const VK_ALT: u8 = 0x12; // real name: VK_MENU

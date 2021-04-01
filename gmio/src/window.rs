@@ -52,6 +52,8 @@ pub enum Event {
     MouseWheelUp,
     MouseWheelDown,
     MouseMove(i32, i32),
+    Cactus,
+    WindowTrick,
 }
 
 #[derive(Copy, Clone)]

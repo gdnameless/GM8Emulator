@@ -48,6 +48,8 @@ pub enum Input {
     MouseRelease(MouseButton),
     MouseWheelUp,
     MouseWheelDown,
+    Cactus,
+    WindowTrick,
 }
 
 impl Replay {

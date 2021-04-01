@@ -17,6 +17,7 @@ pub enum Message {
         mouse_buttons_requested: Vec<input::MouseButton>,
         instance_requested: Option<ID>,
         new_seed: Option<i32>,
+        misc_inputs: Vec<input::MiscInputs>,
     },
 
     /// Tells the game whether to send MousePosition info (it doesn't by default)
@@ -24,6 +25,9 @@ pub enum Message {
 
     /// Tells the game to create a savestate in the given index
     Save { filename: String },
+
+    /// Tells the game to create a backup with the given number
+    Backup { number: u32 },
 
     /// Tells the game to load the savestate with the given index and then send us an update
     Load {
@@ -45,6 +49,9 @@ pub enum Information {
         frame_count: usize,
         seed: i32,
         instance: Option<InstanceDetails>,
+        misc_inputs: Vec<input::MiscInputs>,
+        rerecords: u32,
+        backups: u32,
     },
 
     /// Tells the controller that a key was pressed while the game window was focused
@@ -64,6 +71,12 @@ pub enum Information {
 
     /// Sends the controller some general info which should be shown to the user
     General { message: String },
+
+    /// Tells the controller that cactus
+    Cactus,
+
+    /// Tells the controller that window trick
+    WindowTrick,
 }
 
 /// The details of an instance sent to the control panel for display.

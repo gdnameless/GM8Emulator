@@ -28,7 +28,9 @@ pub struct ControlPanel {
     pub mouse_buttons: Vec<MouseButton>,
     pub mouse_position_button: MousePositionButton,
     pub big_save_button: BigSaveButton,
+    pub backup_button: BackupButton,
     pub save_buttons: Vec<SaveButton>,
+    pub misc_buttons: Vec<MiscButton>,
     pub seed_changer: SeedChanger,
     pub stream: TcpStream,
     mouse_x: i32,
@@ -37,6 +39,8 @@ pub struct ControlPanel {
     watched_instance: Option<InstanceDetails>,
     pub seed: i32,
     pub new_seed: Option<i32>,
+
+    pub rerecords: u32,
 
     pub frame_count: usize,
     pub game_mouse_pos: (f64, f64),
@@ -56,6 +60,7 @@ pub struct ControlPanel {
     save_button_active: Sprite,
     save_button_inactive: Sprite,
     button_outline: Sprite,
+    label_create_backup: Sprite,
 
     menu_context: Option<MenuContext>,
 
@@ -87,6 +92,15 @@ pub struct KeyButton {
 }
 
 #[derive(Clone, Copy)]
+pub struct MiscButton {
+    pub x: i32,
+    pub y: i32,
+    pub miscinputtype: input::MiscInputs,
+    pub pressed: bool,
+    pub label: Sprite,
+}
+
+#[derive(Clone, Copy)]
 pub struct MouseButton {
     pub x: i32,
     pub y: i32,
@@ -105,6 +119,13 @@ pub struct MousePositionButton {
 pub struct BigSaveButton {
     pub x: i32,
     pub y: i32,
+}
+
+#[derive(Clone, Copy)]
+pub struct BackupButton {
+    pub x: i32,
+    pub y: i32,
+    pub number: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -146,6 +167,12 @@ impl BigSaveButton {
     }
 }
 
+impl BackupButton {
+    pub fn contains_point(&self, x: i32, y: i32) -> bool {
+        x >= self.x && x < (self.x + 100) && y >= self.y && y < (self.y + 30)
+    }
+}
+
 impl SeedChanger {
     pub fn contains_point(&self, x: i32, y: i32) -> bool {
         x >= self.x && x < (self.x + 180) && y >= (self.y - 14) && y < (self.y + 3)
@@ -153,6 +180,12 @@ impl SeedChanger {
 }
 
 impl KeyButton {
+    pub fn contains_point(&self, x: i32, y: i32) -> bool {
+        x >= self.x && x < (self.x + KEY_BUTTON_SIZE as i32) && y >= self.y && y < (self.y + KEY_BUTTON_SIZE as i32)
+    }
+}
+
+impl MiscButton {
     pub fn contains_point(&self, x: i32, y: i32) -> bool {
         x >= self.x && x < (self.x + KEY_BUTTON_SIZE as i32) && y >= self.y && y < (self.y + KEY_BUTTON_SIZE as i32)
     }
@@ -215,6 +248,13 @@ impl ControlPanel {
         let label_z = Self::upload_bmp(&mut atlases, include_bytes!("images/KeyLabelZ.bmp"));
         let label_f2 = Self::upload_bmp(&mut atlases, include_bytes!("images/KeyLabelF2.bmp"));
         let label_shift = Self::upload_bmp(&mut atlases, include_bytes!("images/KeyLabelShift.bmp"));
+
+        let label_a = Self::upload_bmp(&mut atlases, include_bytes!("images/KeyLabelA.bmp"));
+        let label_d = Self::upload_bmp(&mut atlases, include_bytes!("images/KeyLabelD.bmp"));
+        let label_s = Self::upload_bmp(&mut atlases, include_bytes!("images/KeyLabelS.bmp"));
+        let label_window = Self::upload_bmp(&mut atlases, include_bytes!("images/KeyLabelWindow.bmp"));
+        let label_cactus = Self::upload_bmp(&mut atlases, include_bytes!("images/KeyLabelCactus.bmp"));
+        let label_create_backup = Self::upload_bmp(&mut atlases, include_bytes!("images/create_backup.bmp"));
 
         // Helper fn: create a Font
         fn make_font(
@@ -289,16 +329,25 @@ impl ControlPanel {
                 KeyButton { x: 151, y: 102, key: input::Key::Up, state: ButtonState::Neutral, label: label_up },
                 KeyButton { x: 32, y: 90, key: input::Key::R, state: ButtonState::Neutral, label: label_r },
                 KeyButton { x: 32, y: 150, key: input::Key::Shift, state: ButtonState::Neutral, label: label_shift },
-                KeyButton { x: 270, y: 90, key: input::Key::F2, state: ButtonState::Neutral, label: label_f2 },
                 KeyButton { x: 270, y: 150, key: input::Key::Z, state: ButtonState::Neutral, label: label_z },
+            
+                KeyButton { x: 210, y: 210, key: input::Key::F2, state: ButtonState::Neutral, label: label_f2 },
+                KeyButton { x: 270, y: 90, key: input::Key::S, state: ButtonState::Neutral, label: label_s },
+                KeyButton { x: 210, y: 90, key: input::Key::X, state: ButtonState::Neutral, label: label_d },
+                KeyButton { x: 92, y: 90, key: input::Key::G, state: ButtonState::Neutral, label: label_a },
+            ],
+            misc_buttons: vec![
+                MiscButton { x: 151, y: 210, miscinputtype: input::MiscInputs::Cactus, pressed: false, label: label_cactus },
+                MiscButton { x: 92, y: 210, miscinputtype: input::MiscInputs::WindowTrick, pressed: false, label: label_window },
             ],
             mouse_buttons: vec![
-                MouseButton { x: 4, y: 248, button: input::MouseButton::Left, state: ButtonState::Neutral },
-                MouseButton { x: 56, y: 248, button: input::MouseButton::Middle, state: ButtonState::Neutral },
-                MouseButton { x: 108, y: 248, button: input::MouseButton::Right, state: ButtonState::Neutral },
+                MouseButton { x: 4, y: 314, button: input::MouseButton::Left, state: ButtonState::Neutral },
+                MouseButton { x: 56, y: 314, button: input::MouseButton::Middle, state: ButtonState::Neutral },
+                MouseButton { x: 108, y: 314, button: input::MouseButton::Right, state: ButtonState::Neutral },
             ],
-            mouse_position_button: MousePositionButton { x: 310, y: 250, active: false },
-            big_save_button: BigSaveButton { x: 125, y: 400 },
+            mouse_position_button: MousePositionButton { x: 310, y: 316, active: false },
+            big_save_button: BigSaveButton { x: 47, y: 400 },
+            backup_button: BackupButton { x: 156, y: 400, number: 0 },
             save_buttons,
             seed_changer: SeedChanger { x: 8, y: 540 },
             stream,
@@ -308,6 +357,8 @@ impl ControlPanel {
             watched_instance: None,
             seed: 0,
             new_seed: None,
+
+            rerecords: 0,
 
             frame_count: 0,
             game_mouse_pos: (0.0, 0.0),
@@ -327,11 +378,32 @@ impl ControlPanel {
             save_button_active,
             save_button_inactive,
             button_outline,
+            label_create_backup,
 
             menu_context: None,
             read_buffer: Vec::new(),
             project_dir,
         })
+    }
+
+    fn to_time(&mut self, frame_count: usize) -> String {
+        let ms = frame_count % 50 * 2;
+        let s = frame_count / 50 % 60;
+        let m = frame_count / 3000 % 60;
+        let h = frame_count / 180000;
+        let ms_f = if ms < 10 { format!("0{}", ms) } else { ms.to_string() };
+        let s_f = if s < 10 { format!("0{}", s) } else { s.to_string() };
+        let m_f = if m < 10 { format!("0{}", m) } else { m.to_string() };
+        let h_f = h.to_string();
+        if h > 0 {
+            format!("{}:{}:{}.{}", h_f, m_f, s_f, ms_f)
+        }
+        else if m > 0 {
+            format!("{}:{}.{}", m_f, s_f, ms_f)
+        }
+        else {
+            format!("{}.{}", s_f, ms_f)
+        }
     }
 
     pub fn update(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
@@ -383,6 +455,12 @@ impl ControlPanel {
                         }
                     }
 
+                    for button in self.misc_buttons.iter_mut() {
+                        if button.contains_point(self.mouse_x, self.mouse_y) {
+                            button.pressed = !button.pressed;
+                        }
+                    }
+
                     for button in self.mouse_buttons.iter_mut() {
                         if button.contains_point(self.mouse_x, self.mouse_y) {
                             button.state = match button.state {
@@ -417,6 +495,14 @@ impl ControlPanel {
                         self.window.show_context_menu(&[("Load [W]\0".into(), 1), ("Save [Q]\0".into(), 0)]);
                         self.menu_context = Some(MenuContext::SaveButton("save.bin".into()));
                         break
+                    }
+
+                    if self.backup_button.contains_point(self.mouse_x, self.mouse_y) {
+                        if self.backup_button.contains_point(self.mouse_x, self.mouse_y) {
+                            self.stream.send_message(&message::Message::Backup { number: self.backup_button.number })?;
+                            println!("Probably saved to backup{}.bin", &self.backup_button.number);
+                            self.backup_button.number += 1;
+                        }
                     }
 
                     if self.seed_changer.contains_point(self.mouse_x, self.mouse_y) {
@@ -615,6 +701,7 @@ impl ControlPanel {
     fn send_advance(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         let mut key_inputs = Vec::new();
         let mut keys_requested = Vec::new();
+        let mut misc_inputs = Vec::new();
 
         for key in self.key_buttons.iter() {
             keys_requested.push(key.key);
@@ -640,6 +727,12 @@ impl ControlPanel {
                     key_inputs.push((key.key, true));
                     key_inputs.push((key.key, false));
                 },
+            }
+        }
+
+        for key in self.misc_buttons.iter() {
+            if key.pressed {
+                misc_inputs.push(key.miscinputtype);
             }
         }
 
@@ -681,6 +774,7 @@ impl ControlPanel {
             mouse_buttons_requested,
             instance_requested: self.watched_id,
             new_seed: self.new_seed,
+            misc_inputs,
         })?;
 
         self.await_update()
@@ -696,6 +790,9 @@ impl ControlPanel {
                     frame_count,
                     seed,
                     instance,
+                    misc_inputs: _,
+                    rerecords,
+                    backups,
                 }))) => {
                     self.frame_count = frame_count;
                     self.game_mouse_pos = mouse_location;
@@ -715,6 +812,15 @@ impl ControlPanel {
                         } else {
                             button.state = ButtonState::Neutral;
                         }
+                    }
+                    for button in self.misc_buttons.iter_mut() {
+                        button.pressed = false;
+                    }
+                    if self.rerecords < rerecords {
+                        self.rerecords = rerecords;
+                    }
+                    if self.backup_button.number < backups {
+                        self.backup_button.number = backups + 1;
                     }
                     break Ok(true)
                 },
@@ -738,7 +844,11 @@ impl ControlPanel {
         );
 
         draw_text(&mut self.renderer, "Frame:", 4.0, 19.0, &self.font, 0, 1.0);
-        draw_text(&mut self.renderer, &self.frame_count.to_string(), 4.0, 32.0, &self.font, 0, 1.0);
+        let mut time = self.frame_count.to_string();
+        time.push_str(" (");
+        time.push_str(&*self.to_time(self.frame_count));
+        time.push_str(")");
+        draw_text(&mut self.renderer, &time, 4.0, 32.0, &self.font, 0, 1.0);
 
         self.renderer.draw_sprite(
             &self.advance_button_normal.atlas_ref,
@@ -784,6 +894,49 @@ impl ControlPanel {
             self.renderer.draw_sprite(
                 &sprite_r.atlas_ref,
                 f64::from(button.x + sprite_l.w),
+                f64::from(button.y),
+                1.0,
+                1.0,
+                0.0,
+                0xFFFFFF,
+                alpha,
+            );
+            self.renderer.draw_sprite(
+                &button.label.atlas_ref,
+                f64::from(button.x),
+                f64::from(button.y),
+                1.0,
+                1.0,
+                0.0,
+                0xFFFFFF,
+                alpha,
+            );
+            self.renderer.draw_sprite(
+                &self.button_outline.atlas_ref,
+                f64::from(button.x),
+                f64::from(button.y),
+                1.0,
+                1.0,
+                0.0,
+                0xFFFFFF,
+                alpha,
+            );
+        }
+
+        for button in self.misc_buttons.iter() {
+            let alpha = if button.contains_point(self.mouse_x, self.mouse_y) { 1.0 } else { 0.6 };
+            let sprite_l = match button.pressed {
+                false => &self.key_button_l_neutral,
+                true => &self.key_button_l_held,
+            };
+            let sprite_r = match button.pressed {
+                false => &self.key_button_r_neutral,
+                true => &self.key_button_r_held,
+            };
+            self.renderer.draw_sprite(&sprite_l.atlas_ref, button.x as _, button.y as _, 1.0, 1.0, 0.0, 0xFFFFFF, alpha);
+            self.renderer.draw_sprite(
+                &sprite_r.atlas_ref,
+                f64::from(button.x + &sprite_l.w),
                 f64::from(button.y),
                 1.0,
                 1.0,
@@ -887,13 +1040,24 @@ impl ControlPanel {
             if self.big_save_button.contains_point(self.mouse_x, self.mouse_y) { 1.0 } else { 0.8 },
         );
 
+        self.renderer.draw_sprite(
+            &self.label_create_backup.atlas_ref,
+            self.backup_button.x.into(),
+            self.backup_button.y.into(),
+            1.0,
+            1.0,
+            0.0,
+            0xFFFFFF,
+            if self.backup_button.contains_point(self.mouse_x, self.mouse_y) { 1.0 } else { 0.8 },
+        );
+
         let (x, y) = self.game_mouse_pos;
-        draw_text(&mut self.renderer, &format!("x: {}", x), 180.0, 266.0, &self.font_small, 0, 1.0);
-        draw_text(&mut self.renderer, &format!("y: {}", y), 180.0, 286.0, &self.font_small, 0, 1.0);
+        draw_text(&mut self.renderer, &format!("x: {}", x), 180.0, 332.0, &self.font_small, 0, 1.0);
+        draw_text(&mut self.renderer, &format!("y: {}", y), 180.0, 352.0, &self.font_small, 0, 1.0);
         if self.mouse_position_button.active {
             let (x, y) = self.client_mouse_pos;
-            draw_text(&mut self.renderer, &x.to_string(), 250.0, 266.0, &self.font_small, 0xA0A0A0, 1.0);
-            draw_text(&mut self.renderer, &y.to_string(), 250.0, 286.0, &self.font_small, 0xA0A0A0, 1.0);
+            draw_text(&mut self.renderer, &x.to_string(), 250.0, 332.0, &self.font_small, 0xA0A0A0, 1.0);
+            draw_text(&mut self.renderer, &y.to_string(), 250.0, 352.0, &self.font_small, 0xA0A0A0, 1.0);
         }
 
         for button in self.save_buttons.iter() {
@@ -912,7 +1076,7 @@ impl ControlPanel {
         }
 
         draw_text(&mut self.renderer, "Keyboard", 123.0, 82.0, &self.font, 0, 1.0);
-        draw_text(&mut self.renderer, "Mouse", 143.0, 236.0, &self.font, 0, 1.0);
+        draw_text(&mut self.renderer, "Mouse", 143.0, 302.0, &self.font, 0, 1.0);
         draw_text(&mut self.renderer, "Saves", 143.0, 390.0, &self.font, 0, 1.0);
 
         let (seed, seed_col) = if let Some(s) = self.new_seed { (s, 0xFF) } else { (self.seed, 0) };
@@ -925,6 +1089,8 @@ impl ControlPanel {
             seed_col,
             if self.seed_changer.contains_point(self.mouse_x, self.mouse_y) { 1.0 } else { 0.75 },
         );
+
+        draw_text(&mut self.renderer, &format!("Rerecords: {}", self.rerecords), 182.0, 540.0, &self.font_small, 0, 0.75);
 
         if let Some(id) = self.watched_id.as_ref() {
             draw_text(&mut self.renderer, "Watching:", 8.0, 605.0, &self.font, 0, 1.0);

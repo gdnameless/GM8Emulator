@@ -10,6 +10,7 @@ pub mod particle;
 pub mod pathfinding;
 pub mod replay;
 pub mod savestate;
+pub mod stats;
 pub mod string;
 pub mod surface;
 pub mod transition;
@@ -18,6 +19,7 @@ pub mod view;
 pub use background::Background;
 pub use replay::Replay;
 pub use savestate::SaveState;
+pub use stats::Stats;
 pub use view::View;
 
 use crate::{
@@ -27,6 +29,7 @@ use crate::{
         font::{Character, Font},
         path::{self, Path},
         room::{self, Room},
+        sound::{self, Sound},
         sprite::{Collider, Frame, Sprite},
         trigger::{self, Trigger},
         Object, Script, Timeline,
@@ -48,9 +51,11 @@ use gmio::{
 };
 use includedfile::IncludedFile;
 use indexmap::IndexMap;
+use rodio::{OutputStream, OutputStreamHandle, Sink};
 use serde::{Deserialize, Serialize};
 use shared::{
     input::MouseButton,
+    input::MiscInputs,
     message::{self, Message, MessageStream},
     types::{Colour, ID},
 };
@@ -64,6 +69,7 @@ use std::{
     net::{SocketAddr, TcpStream},
     path::PathBuf,
     rc::Rc,
+    sync::Arc,
     time::{Duration, Instant},
 };
 use string::RCStr;
@@ -175,6 +181,11 @@ pub struct Game {
     pub play_type: PlayType,
     pub stored_events: VecDeque<replay::Event>,
 
+    // rodio
+    pub rodio_stream: OutputStream,
+    pub rodio_stream_handle: OutputStreamHandle,
+    pub rodio_sinks: Vec<(Sink, ID, bool)>,
+
     // winit windowing
     pub window: Window,
     pub window_border: bool,
@@ -218,10 +229,10 @@ pub struct Assets {
     pub paths: Vec<Option<Box<Path>>>,
     pub rooms: Vec<Option<Box<Room>>>,
     pub scripts: Vec<Option<Box<Script>>>,
+    pub sounds: Vec<Option<Box<Sound>>>,
     pub sprites: Vec<Option<Box<Sprite>>>,
     pub timelines: Vec<Option<Box<Timeline>>>,
     pub triggers: Vec<Option<Box<Trigger>>>,
-    // todo
 }
 
 impl From<PascalString> for RCStr {
@@ -290,6 +301,9 @@ impl Game {
             gm8exe::GameVersion::GameMaker8_0 => Version::GameMaker8_0,
             gm8exe::GameVersion::GameMaker8_1 => Version::GameMaker8_1,
         };
+
+        // Set up rodio output
+        let (rodio_stream, rodio_stream_handle) = rodio::OutputStream::try_default().expect("Failed to start rodio");
 
         // If there are no rooms, you can't build a GM8 game. Fatal error.
         // We need a lot of the initialization info from the first room,
@@ -763,6 +777,26 @@ impl Game {
             objects
         };
 
+        let sounds = sounds
+            .into_iter()
+            .map(|s| {
+                s.map(|b| {
+                    Box::new(Sound {
+                        name: b.name.into(),
+                        source: b.data.map(Arc::from),
+                        kind: match b.kind {
+                            gm8exe::asset::sound::SoundKind::Normal => sound::Kind::Normal,
+                            gm8exe::asset::sound::SoundKind::BackgroundMusic => sound::Kind::BackgroundMusic,
+                            gm8exe::asset::sound::SoundKind::ThreeDimensional => sound::Kind::ThreeDimensional,
+                            gm8exe::asset::sound::SoundKind::Multimedia => sound::Kind::Multimedia,
+                        },
+                        volume: b.volume,
+                        pan: b.pan,
+                    })
+                })
+            })
+            .collect();
+
         let rooms = rooms
             .into_iter()
             .map(|t| {
@@ -904,7 +938,7 @@ impl Game {
             room_colour: room1_colour,
             show_room_colour: room1_show_colour,
             input_manager: InputManager::new(),
-            assets: Assets { backgrounds, fonts, objects, paths, rooms, scripts, sprites, timelines, triggers },
+            assets: Assets { backgrounds, fonts, objects, paths, rooms, scripts, sounds, sprites, timelines, triggers },
             event_holders,
             custom_draw_objects,
             views_enabled: false,
@@ -983,6 +1017,9 @@ impl Game {
             scaling,
             play_type,
             stored_events: VecDeque::new(),
+            rodio_stream,
+            rodio_stream_handle,
+            rodio_sinks: Vec::new(),
 
             // load_room sets this
             unscaled_width: 0,
@@ -1603,6 +1640,8 @@ impl Game {
                         Event::MouseWheelUp => self.input_manager.mouse_scroll_up(),
                         Event::MouseWheelDown => self.input_manager.mouse_scroll_down(),
                         Event::Resize(w, h) => println!("user resize: width={}, height={}", w, h),
+                        Event::Cactus => self.input_manager.shift_cactus(),
+                        Event::WindowTrick => self.input_manager.shift_window_trick(),
                     }
                 }
             },
@@ -1723,6 +1762,24 @@ impl Game {
                             File::create(&path)?.write_all(&bytes)?;
                         }
 
+                        let mut rerecords = 0;
+                        let mut backups = 0;
+                        path = project_path.clone();
+                        path.push(stats::FILENAME);
+                        if std::fs::metadata(&path).is_ok() {
+                            path = project_path.clone();
+                            path.push(stats::FILENAME);
+                            let f = File::open(&path)?;
+                            let state = bincode::deserialize_from::<_, Stats>(BufReader::new(f))?;
+                            rerecords = state.rerecords;
+                            backups = state.backups;
+                        }
+                        else {
+                            let mut f = File::create(&path)?;
+                            let bytes = bincode::serialize(&Stats::from(0, 0))?;
+                            f.write_all(&bytes)?;
+                        }
+
                         // Send an update
                         stream.send_message(&message::Information::Update {
                             keys_held: keys_requested
@@ -1737,6 +1794,9 @@ impl Game {
                             frame_count: replay.frame_count(),
                             seed: self.rand.seed(),
                             instance: None,
+                            misc_inputs: vec!(),
+                            rerecords: rerecords,
+                            backups: backups,
                         })?;
                         break
                     },
@@ -1764,6 +1824,7 @@ impl Game {
                         mouse_buttons_requested,
                         instance_requested,
                         new_seed,
+                        misc_inputs,
                     } => {
                         // Create a frame...
                         let mut frame = replay.new_frame(self.room_speed);
@@ -1792,6 +1853,18 @@ impl Game {
                             } else {
                                 self.input_manager.mouse_release(button);
                                 frame.inputs.push(replay::Input::MouseRelease(button));
+                            }
+                        }
+                        for misc_input in misc_inputs.into_iter() {
+                            match misc_input {
+                                MiscInputs::Cactus => {
+                                    self.input_manager.shift_cactus();
+                                    frame.inputs.push(replay::Input::Cactus);
+                                },
+                                MiscInputs::WindowTrick => {
+                                    self.input_manager.shift_window_trick();
+                                    frame.inputs.push(replay::Input::WindowTrick);
+                                },
                             }
                         }
                         self.input_manager.mouse_update_previous();
@@ -1828,6 +1901,9 @@ impl Game {
                                 instance.update_bbox(self.get_instance_mask_sprite(x));
                                 instance_details(&self.assets, instance)
                             }),
+                            misc_inputs: vec!(),
+                            rerecords: 0,
+                            backups: 0,
                         })?
                     },
 
@@ -1843,13 +1919,45 @@ impl Game {
                         f.write_all(&bytes)?;
                     },
 
+                    Message::Backup { number } => {
+                        // Save a savestate to a file
+                        let mut path = project_path.clone();
+                        std::fs::create_dir_all(&path)?;
+                        path.push(format!("backup{}.bin", number));
+                        let mut f = File::create(&path)?;
+                        let bytes = bincode::serialize(&SaveState::from(self, replay.clone()))?;
+                        f.write_all(&bytes)?;
+
+                        // Set backup count
+                        path = project_path.clone();
+                        path.push(stats::FILENAME);
+                        f = File::open(&path)?;
+                        let state = bincode::deserialize_from::<_, Stats>(BufReader::new(f))?;
+                        let rerecords = state.rerecords;
+                        let backups = number;
+                        f = File::create(&path)?;
+                        let bytes = bincode::serialize(&Stats::from(rerecords, backups))?;
+                        f.write_all(&bytes)?;
+                    }
+
                     Message::Load { filename, keys_requested, mouse_buttons_requested, instance_requested } => {
                         // Load savestate from a file
                         let mut path = project_path.clone();
                         path.push(filename);
-                        let f = File::open(&path)?;
+                        let mut f = File::open(&path)?;
                         let state = bincode::deserialize_from::<_, SaveState>(BufReader::new(f))?;
                         replay = state.load_into(self);
+                        
+                        // Get and increment rerecord count
+                        path = project_path.clone();
+                        path.push(stats::FILENAME);
+                        f = File::open(&path)?;
+                        let state = bincode::deserialize_from::<_, Stats>(BufReader::new(f))?;
+                        let rerecords = state.rerecords + 1;
+                        let backups = state.backups;
+                        f = File::create(&path)?;
+                        let bytes = bincode::serialize(&Stats::from(rerecords, backups))?;
+                        f.write_all(&bytes)?;
 
                         // Send an update
                         stream.send_message(&message::Information::Update {
@@ -1869,6 +1977,9 @@ impl Game {
                                 instance.update_bbox(self.get_instance_mask_sprite(x));
                                 instance_details(&self.assets, instance)
                             }),
+                            misc_inputs: vec!(),
+                            rerecords: rerecords,
+                            backups: 0,
                         })?;
                     },
 
@@ -1932,6 +2043,14 @@ impl Game {
                         stream.send_message(message::Information::KeyPressed { key })?;
                     },
 
+                    Event::Cactus => {
+                        stream.send_message(message::Information::Cactus)?;
+                    },
+
+                    Event::WindowTrick => {
+                        stream.send_message(message::Information::WindowTrick)?;
+                    },
+
                     _ => (),
                 }
             }
@@ -1983,6 +2102,8 @@ impl Game {
                         replay::Input::MouseRelease(b) => self.input_manager.mouse_release(*b),
                         replay::Input::MouseWheelUp => self.input_manager.mouse_scroll_up(),
                         replay::Input::MouseWheelDown => self.input_manager.mouse_scroll_down(),
+                        replay::Input::Cactus => self.input_manager.shift_cactus(),
+                        replay::Input::WindowTrick => self.input_manager.shift_window_trick(),
                     }
                 }
             }
@@ -2637,6 +2758,36 @@ impl Game {
                     if self.instance_list.get(handle).is_active() && pred(handle) { Some(handle) } else { None }
                 } else {
                     None
+                }
+            },
+        }
+    }
+    
+    // Plays a sound, looking for an available rodio sink
+    pub fn play_sound<S>(&mut self, source: S, sound_id: ID, use_multimedia: bool)
+    where
+        S: rodio::Source + Send + 'static,
+        S::Item: rodio::Sample + Send,
+    {
+        // If this is multimedia, we need to stop any other multimedia sounds...
+        if use_multimedia {
+            self.rodio_sinks.retain(|(_, _, x)| !x);
+        }
+
+        // Look for a free sink
+        match self.rodio_sinks.iter_mut().find(|(x, _, _)| x.empty()) {
+            Some((sink, id, multimedia)) => {
+                // Use this sink and change the id of the sound being played here
+                sink.append(source);
+                *id = sound_id;
+                *multimedia = use_multimedia;
+            },
+            None => {
+                // There are no free sinks, so make a new one
+                // PlayError here is silently ignored (heh) - probably just means there is no output device
+                if let Ok(sink) = rodio::Sink::try_new(&self.rodio_stream_handle) {
+                    sink.append(source);
+                    self.rodio_sinks.push((sink, sound_id, use_multimedia));
                 }
             },
         }
